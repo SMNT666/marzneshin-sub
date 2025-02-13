@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Определение путей к директориям и файлу конфигурации
-base_dir="/var/lib/marzban/templates"
-env_file="/opt/marzban/.env"
+base_dir="/var/lib/marzneshin/templates"
+env_file="/etc/opt/marzneshin/.env"
 
 declare -a dirs=("singbox" "v2ray" "clash" "subscription")
 
