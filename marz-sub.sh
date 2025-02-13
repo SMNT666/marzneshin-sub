@@ -1,7 +1,9 @@
 #!/bin/bash
 
-# Определение путей к директориям
+# Определение путей к директориям и файлу конфигурации
 base_dir="/var/lib/marzban/templates"
+env_file="/opt/marzban/.env"
+
 declare -a dirs=("singbox" "v2ray" "clash" "subscription")
 
 # Создание директорий, если они не существуют
@@ -119,17 +121,17 @@ while true; do
         wget -O "$base_dir/singbox/default.json" "https://github.com/cortez24rus/marz-sub/raw/main/singbox/ssb.json" || echo "Ошибка загрузки ssb.json"
         # Получение переменных DOMAIN и SERVER-IP
         sleep 1
-        DOMAIN=$(grep "XRAY_SUBSCRIPTION_URL_PREFIX" /opt/marzban/.env | cut -d '"' -f 2 | sed 's|https://||')
+        DOMAIN=$(grep "XRAY_SUBSCRIPTION_URL_PREFIX" "$env_file" | cut -d '"' -f 2 | sed 's|https://||')
         sleep 1
         SERVER_IP=$(wget -qO- https://ipinfo.io/ip)
         sleep 1
         # Обновление файла default.json (на основе клиентского шаблона secret-sing-box) в директории singbox
-jq --arg domain "$DOMAIN" --arg server_ip "$SERVER_IP" '
-  .dns.servers[0].client_subnet = $server_ip |
-  (.dns.rules[] | select(.domain_suffix? and (.domain_suffix | length > 0)) | .domain_suffix[4]) = $domain |
-  (.route.rules[] | select(.domain_suffix? and (.domain_suffix | length > 0)) | .domain_suffix[4]) = $domain |
-  (.route.rules[] | select(.ip_cidr? and (.ip_cidr | length > 0)) | .ip_cidr[0]) = $server_ip
-' "$base_dir/singbox/default.json" > "$base_dir/singbox/temp.json" && mv "$base_dir/singbox/temp.json" "$base_dir/singbox/default.json"
+        jq --arg domain "$DOMAIN" --arg server_ip "$SERVER_IP" '
+          .dns.servers[0].client_subnet = $server_ip |
+          (.dns.rules[] | select(.domain_suffix? and (.domain_suffix | length > 0)) | .domain_suffix[4]) = $domain |
+          (.route.rules[] | select(.domain_suffix? and (.domain_suffix | length > 0)) | .domain_suffix[4]) = $domain |
+          (.route.rules[] | select(.ip_cidr? and (.ip_cidr | length > 0)) | .ip_cidr[0]) = $server_ip
+        ' "$base_dir/singbox/default.json" > "$base_dir/singbox/temp.json" && mv "$base_dir/singbox/temp.json" "$base_dir/singbox/default.json"
         break
     elif [ "$choice" -eq 2 ]; then
         wget -O "$base_dir/singbox/default.json" "https://github.com/Skrepysh/tools/raw/main/marzban-subscription-templates/sing-sub.json" || echo "Ошибка загрузки sing-sub.json"
@@ -138,7 +140,7 @@ jq --arg domain "$DOMAIN" --arg server_ip "$SERVER_IP" '
         read -p "Введите URL для загрузки: " custom_url
         if [[ "$custom_url" =~ ^https?:// ]]; then
             sburl="$custom_url"
-            wget -O "$base_dir/singbox/default.json" "$sburl" || echo "Ошибка загрузки клиентског шаблона sing-box"
+            wget -O "$base_dir/singbox/default.json" "$sburl" || echo "Ошибка загрузки клиентского шаблона sing-box"
             break
         else
             echo "Неверный URL. Попробуйте снова."
@@ -148,30 +150,23 @@ jq --arg domain "$DOMAIN" --arg server_ip "$SERVER_IP" '
     fi
 done
 
-# Обновление или добавление настроек в .env файл
-env_file="/opt/marzban/.env"
-
+# Функция для обновления или добавления настроек в .env файл
 update_or_add() {
     local key="$1"
     local value="$2"
     local file="$3"
 
-    # Используем awk для удаления всех предыдущих записей с этим ключом, включая закомментированные
+    # Удаляем предыдущие записи с этим ключом и добавляем новую строку в конец файла
     awk -v key="$key" -v value="$value" '
-    # Удаляем строки, которые полностью совпадают с ключом (включая закомментированные)
-    $1 != key && !(NF > 1 && $1 == "#" && $2 == key) {print}
-    
-    # Добавляем новую строку в конец файла
-    END {print key " = \"" value "\""}
+        $1 != key && !(NF > 1 && $1 == "#" && $2 == key) {print}
+        END {print key " = \"" value "\"" }
     ' "$file" > "$file.tmp"
 
-    # Замена оригинального файла
     mv "$file.tmp" "$file"
 }
 
-
 # Обновление переменных конфигурации
-update_or_add "CUSTOM_TEMPLATES_DIRECTORY" "/var/lib/marzban/templates/" "$env_file"
+update_or_add "CUSTOM_TEMPLATES_DIRECTORY" "$base_dir/" "$env_file"
 update_or_add "SUBSCRIPTION_PAGE_TEMPLATE" "subscription/index.html" "$env_file"
 update_or_add "SINGBOX_SUBSCRIPTION_TEMPLATE" "singbox/default.json" "$env_file"
 update_or_add "CLASH_SUBSCRIPTION_TEMPLATE" "clash/default.yml" "$env_file"
@@ -180,6 +175,5 @@ update_or_add "V2RAY_SUBSCRIPTION_TEMPLATE" "v2ray/default.json" "$env_file"
 update_or_add "SUB_SUPPORT_URL" "$tg_escaped_link" "$env_file"
 
 echo "Обновление файла .env выполнено."
-
 echo "Скрипт выполнен успешно."
 echo "Не забудь перезапустить Marzban."
